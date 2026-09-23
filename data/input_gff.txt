@@ -1,0 +1,4 @@
+# Lista funzioni diagnostiche GFF da processare
+A16_4LA_91____1_518_88_Check_battery
+LB63x_01____2_100_01_Engine_control
+AU58x_09____3_400_12_Transmission_check

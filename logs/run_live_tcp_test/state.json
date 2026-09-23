@@ -1,0 +1,58 @@
+{
+  "session_id": "run_live_tcp_test",
+  "created_at": "2026-09-22T15:15:49.003733+00:00",
+  "updated_at": "2026-09-22T15:32:51.722732+00:00",
+  "total_gff": 3,
+  "tasks": [
+    {
+      "task_id": "GFF_001",
+      "name": "Live_GFF_01",
+      "status": "SUCCESS",
+      "started_at": "2026-09-22T15:15:49.009106+00:00",
+      "completed_at": "2026-09-22T15:15:49.988805+00:00",
+      "duration_seconds": 0.96,
+      "blocks_modified": {
+        "message": 1,
+        "comment": 0,
+        "question": 0
+      },
+      "error_details": null,
+      "error_screenshot_path": null,
+      "retry_count": 0
+    },
+    {
+      "task_id": "GFF_002",
+      "name": "Live_GFF_02",
+      "status": "SUCCESS",
+      "started_at": "2026-09-22T15:15:50.049314+00:00",
+      "completed_at": "2026-09-22T15:15:51.073466+00:00",
+      "duration_seconds": 0.97,
+      "blocks_modified": {
+        "message": 1,
+        "comment": 0,
+        "question": 0
+      },
+      "error_details": null,
+      "error_screenshot_path": null,
+      "retry_count": 0
+    },
+    {
+      "task_id": "GFF_003",
+      "name": "Live_GFF_03",
+      "status": "SUCCESS",
+      "started_at": "2026-09-22T15:15:51.130477+00:00",
+      "completed_at": "2026-09-22T15:15:52.150253+00:00",
+      "duration_seconds": 0.98,
+      "blocks_modified": {
+        "message": 1,
+        "comment": 0,
+        "question": 0
+      },
+      "error_details": null,
+      "error_screenshot_path": null,
+      "retry_count": 0
+    }
+  ],
+  "active_task_id": null,
+  "is_completed": true
+}
