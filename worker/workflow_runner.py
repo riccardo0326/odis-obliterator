@@ -73,40 +73,40 @@ class WorkflowCoordinates(BaseModel):
     """
 
     # Step 1: Toolbar search icon (11th button in toolbar with yellow flashlight)
-    toolbar_search_button: Tuple[int, int] = Field(default=(340, 60), description="Toolbar search button (X, Y).")
+    toolbar_search_button: Tuple[int, int] = Field(default=(284, 67), description="Toolbar search button (X, Y).")
     search_dialog_full_text_tab: Tuple[int, int] = Field(
-        default=(620, 240), description="Full Text Search tab in Search dialog."
+        default=(756, 147), description="Full Text Search tab in Search dialog."
     )
 
     # Step 2: Search dialog text input and confirmation
     search_dialog_input_field: Tuple[int, int] = Field(
-        default=(650, 290), description="Search text input field."
+        default=(733, 201), description="Search text input field."
     )
     search_dialog_ok_button: Tuple[int, int] = Field(
-        default=(870, 520), description="OK button on Search modal dialog."
+        default=(1122, 720), description="OK button on Search modal dialog."
     )
 
     # Step 3: 'Search ended' popup notification OK button
     search_ended_ok_button: Tuple[int, int] = Field(
-        default=(960, 550), description="OK button on 'Search ended' popup."
+        default=(1218, 533), description="OK button on 'Search ended' popup."
     )
 
     # Step 4: Search Results table first row
     search_results_first_row: Tuple[int, int] = Field(
-        default=(700, 650), description="First matching row in Search Results table."
+        default=(1100, 542), description="First matching row in Search Results table."
     )
 
     # Step 5: 'Usage locations' dialog first hierarchy item and OK button
     usage_locations_first_item: Tuple[int, int] = Field(
-        default=(750, 420), description="First usage location tree item."
+        default=(888, 356), description="First usage location tree item."
     )
     usage_locations_ok_button: Tuple[int, int] = Field(
-        default=(980, 680), description="OK button on Usage locations dialog."
+        default=(1198, 630), description="OK button on Usage locations dialog."
     )
 
     # Step 6: Context menu on object tab grey background
     tab_object_background: Tuple[int, int] = Field(
-        default=(600, 350), description="Grey background area in function object tab."
+        default=(262), description="Grey background area in function object tab."
     )
     context_menu_test_sequence: Tuple[int, int] = Field(
         default=(650, 375), description="'Test sequence' item in right-click context menu."

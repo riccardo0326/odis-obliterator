@@ -75,7 +75,7 @@ class Settings(BaseSettings):
         description="URL of the Controller API as seen by the Worker.",
     )
     action_delay: float = Field(
-        default=0.5,
+        default=10.0,
         validation_alias=AliasChoices("ACTION_DELAY", "action_delay"),
         description="Delay in seconds between UI automation actions.",
     )

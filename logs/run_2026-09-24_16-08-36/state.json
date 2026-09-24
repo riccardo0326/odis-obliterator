@@ -1,0 +1,58 @@
+{
+  "session_id": "run_2026-09-24_16-08-36",
+  "created_at": "2026-09-24T14:08:36.984490+00:00",
+  "updated_at": "2026-09-24T14:09:00.514977+00:00",
+  "total_gff": 3,
+  "tasks": [
+    {
+      "task_id": "GFF_001",
+      "name": "A16_4LA_91____1_518_88_Check_battery",
+      "status": "IN_PROGRESS",
+      "started_at": "2026-09-24T14:08:37.021893+00:00",
+      "completed_at": null,
+      "duration_seconds": null,
+      "blocks_modified": {
+        "message": 0,
+        "comment": 0,
+        "question": 0
+      },
+      "error_details": null,
+      "error_screenshot_path": null,
+      "retry_count": 0
+    },
+    {
+      "task_id": "GFF_002",
+      "name": "LB63x_01____2_100_01_Engine_control",
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "duration_seconds": null,
+      "blocks_modified": {
+        "message": 0,
+        "comment": 0,
+        "question": 0
+      },
+      "error_details": null,
+      "error_screenshot_path": null,
+      "retry_count": 0
+    },
+    {
+      "task_id": "GFF_003",
+      "name": "AU58x_09____3_400_12_Transmission_check",
+      "status": "PENDING",
+      "started_at": null,
+      "completed_at": null,
+      "duration_seconds": null,
+      "blocks_modified": {
+        "message": 0,
+        "comment": 0,
+        "question": 0
+      },
+      "error_details": null,
+      "error_screenshot_path": null,
+      "retry_count": 0
+    }
+  ],
+  "active_task_id": "GFF_001",
+  "is_completed": false
+}
