@@ -613,3 +613,139 @@ class TestLiveNetworkHTTPDryRun:
             server.should_exit = True
             server_thread.join(timeout=3.0)
 
+
+class TestEdgeCasesAndRecoveryInDryRun:
+    """Tests for edge cases, error recovery, input files, and task limits in Dry-Run mode."""
+
+    def test_dry_run_with_empty_canvas_no_target_blocks(self, dry_run_environment):
+        """Verify workflow completes gracefully when no target blocks are detected on canvas."""
+        env = dry_run_environment
+        controller_client = env["controller_client"]
+        mock_vision = env["mock_vision"]
+
+        # Vision returns 0 blocks
+        mock_vision.analyze_canvas.return_value = CanvasAnalysisResponse(
+            blocks=[],
+            task_id="Empty_GFF",
+            total_detected=0,
+        )
+
+        runner = WorkflowRunner(
+            settings=env["settings"],
+            ui_driver=env["ui_driver"],
+            screen_capture=env["screen_capture"],
+            controller_client=controller_client,
+            dry_run=True,
+            action_delay=0.0,
+        )
+
+        agent = WorkerAgent(
+            settings=env["settings"],
+            controller_client=controller_client,
+            workflow_runner=runner,
+            dry_run=True,
+            poll_interval=0.01,
+        )
+
+        controller_client.start_session(session_id="run_empty_canvas", gff_list=["Empty_GFF"], force_new=True)
+        summary = agent.run(max_tasks=1)
+
+        assert summary["tasks_processed"] == 1
+        assert summary["tasks_succeeded"] == 1
+        assert summary["total_blocks_modified"] == 0
+
+    def test_dry_run_with_unmodified_text_cancels_dialog(self, dry_run_environment):
+        """Verify that blocks without the target keyword are not modified and closed with Cancel."""
+        env = dry_run_environment
+        controller_client = env["controller_client"]
+        mock_vision = env["mock_vision"]
+
+        mock_vision.analyze_canvas.return_value = CanvasAnalysisResponse(
+            blocks=[
+                DetectedBlock(type=BlockType.MESSAGE, relative_x=0.45, relative_y=0.30, label="Neutral text"),
+            ],
+            task_id="Neutral_GFF",
+            total_detected=1,
+        )
+
+        runner = WorkflowRunner(
+            settings=env["settings"],
+            ui_driver=env["ui_driver"],
+            screen_capture=env["screen_capture"],
+            controller_client=controller_client,
+            dry_run=True,
+            action_delay=0.0,
+            text_supplier=lambda b: "Standard neutral diagnostic instruction without target word.",
+        )
+
+        agent = WorkerAgent(
+            settings=env["settings"],
+            controller_client=controller_client,
+            workflow_runner=runner,
+            dry_run=True,
+            poll_interval=0.01,
+        )
+
+        controller_client.start_session(session_id="run_neutral_text", gff_list=["Neutral_GFF"], force_new=True)
+        summary = agent.run(max_tasks=1)
+
+        assert summary["tasks_processed"] == 1
+        assert summary["tasks_succeeded"] == 1
+        assert summary["total_blocks_modified"] == 0
+
+    def test_dry_run_batch_from_input_file(self, dry_run_environment, tmp_path: Path):
+        """Verify batch session initialization directly from an input file path."""
+        env = dry_run_environment
+        controller_client = env["controller_client"]
+
+        # Create input file
+        input_file = tmp_path / "custom_input.txt"
+        input_file.write_text("GFF_FILE_1\nGFF_FILE_2\n# Comment line\n\nGFF_FILE_3\n", encoding="utf-8")
+
+        start_res = controller_client.start_session(
+            session_id="run_input_file_test",
+            input_file=str(input_file),
+            force_new=True,
+        )
+
+        assert start_res["total_gff"] == 3
+        assert start_res["pending"] == 3
+
+    def test_dry_run_max_tasks_limit(self, dry_run_environment):
+        """Verify worker stops after max_tasks even when more tasks remain in queue."""
+        env = dry_run_environment
+        controller_client = env["controller_client"]
+
+        gffs = ["GFF_1", "GFF_2", "GFF_3", "GFF_4", "GFF_5"]
+        controller_client.start_session(session_id="run_max_tasks_limit", gff_list=gffs, force_new=True)
+
+        runner = WorkflowRunner(
+            settings=env["settings"],
+            ui_driver=env["ui_driver"],
+            screen_capture=env["screen_capture"],
+            controller_client=controller_client,
+            dry_run=True,
+            action_delay=0.0,
+        )
+
+        agent = WorkerAgent(
+            settings=env["settings"],
+            controller_client=controller_client,
+            workflow_runner=runner,
+            dry_run=True,
+            poll_interval=0.01,
+        )
+
+        # Run with max_tasks=2
+        summary = agent.run(max_tasks=2)
+
+        assert summary["tasks_processed"] == 2
+        assert summary["tasks_succeeded"] == 2
+
+        status = controller_client.get_session_status()
+        assert status["total"] == 5
+        assert status["success"] == 2
+        assert status["pending"] == 3
+        assert status["is_completed"] is False
+
+

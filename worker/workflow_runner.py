@@ -41,6 +41,7 @@ from worker.screen_capture import (
     image_to_base64,
 )
 from worker.ui_driver import UIDriver, get_ui_driver
+from worker.local_vision import LocalVisionEngine
 
 logger = logging.getLogger(__name__)
 
@@ -369,6 +370,8 @@ class WorkflowRunner:
         ui_driver: Optional[UIDriver] = None,
         screen_capture: Optional[ScreenCapture] = None,
         controller_client: Optional[ControllerClient] = None,
+        vision_provider: Optional[Any] = None,
+        local_vision_engine: Optional[LocalVisionEngine] = None,
         coordinates: Optional[WorkflowCoordinates] = None,
         dry_run: Optional[bool] = None,
         action_delay: Optional[float] = None,
@@ -381,6 +384,9 @@ class WorkflowRunner:
             ui_driver: UIDriver instance for mouse/keyboard automation.
             screen_capture: ScreenCapture instance.
             controller_client: ControllerClient for AI/text services.
+            vision_provider: Optional in-process canvas vision provider. It must expose
+                ``analyze_canvas(image=..., canvas_bbox=..., task_id=...)``.
+            local_vision_engine: Convenience alias for the standalone local provider.
             coordinates: Configurable UI layout coordinates.
             dry_run: Override dry-run mode (if None, reads from settings.dry_run).
             action_delay: Delay after actions (if None, reads from settings.action_delay).
@@ -398,6 +404,9 @@ class WorkflowRunner:
             base_url=self.settings.controller_api_url,
             timeout=self.settings.timeout,
         )
+        if vision_provider is not None and local_vision_engine is not None:
+            raise ValueError("Provide either vision_provider or local_vision_engine, not both.")
+        self.vision_provider = vision_provider or local_vision_engine
         self.coords = coordinates or WorkflowCoordinates()
         self.text_supplier = text_supplier
 
@@ -567,12 +576,23 @@ class WorkflowRunner:
         # Capture canvas screenshot
         canvas_b64 = self.capture.capture_as_base64(region=self.coords.canvas_bbox)
 
-        # Send to Vision Engine / Controller API
-        detected_blocks = self.client.analyze_canvas(
-            image_base64=canvas_b64,
-            canvas_bbox=self.coords.canvas_bbox,
-            task_id=task_id,
-        )
+        # Prefer an in-process provider for standalone execution. The fallback
+        # remains the existing ControllerClient HTTP/direct dispatch path.
+        if self.vision_provider is not None:
+            analysis = self.vision_provider.analyze_canvas(
+                image=canvas_b64,
+                canvas_bbox=self.coords.canvas_bbox,
+                task_id=task_id,
+            )
+            detected_blocks = analysis.blocks if hasattr(analysis, "blocks") else analysis
+        else:
+            detected_blocks = self.client.analyze_canvas(
+                image_base64=canvas_b64,
+                canvas_bbox=self.coords.canvas_bbox,
+                task_id=task_id,
+            )
+
+        detected_blocks = [DetectedBlock.model_validate(block) for block in detected_blocks]
 
         logger.info(f"Detected {len(detected_blocks)} target blocks on canvas for task {task_id}.")
         self._mark_step(WorkflowStep.STEP_8_EXPAND_CANVAS_AND_SCAN)

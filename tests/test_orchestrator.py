@@ -331,3 +331,65 @@ class TestGFFOrchestrator:
         assert len(set(dispatched_tasks)) == task_count  # No duplicates dispatched
         assert orchestrator.get_current_session().is_completed is True
         assert orchestrator.get_current_session().success_count == task_count
+
+    def test_complete_task_with_skipped_status(self, temp_logs_dir: Path):
+        settings = Settings(logs_dir_override=temp_logs_dir)
+        orchestrator = GFFOrchestrator(settings=settings, logs_dir=temp_logs_dir)
+        orchestrator.start_session(session_id="run_skip_test", gff_list=["Task_Skip"], force_new=True)
+
+        task = orchestrator.get_next_task()
+        assert task is not None
+        completed = orchestrator.complete_task(task_id=task.task_id, status=TaskStatus.SKIPPED)
+
+        assert completed.status == TaskStatus.SKIPPED
+        session = orchestrator.get_current_session()
+        assert session.skipped_count == 1
+        assert session.is_completed is True
+
+    def test_complete_task_duration_auto_calculated(self, temp_logs_dir: Path):
+        settings = Settings(logs_dir_override=temp_logs_dir)
+        orchestrator = GFFOrchestrator(settings=settings, logs_dir=temp_logs_dir)
+        orchestrator.start_session(session_id="run_duration_test", gff_list=["Task_Auto_Dur"], force_new=True)
+
+        task = orchestrator.get_next_task()
+        assert task is not None
+        completed = orchestrator.complete_task(task_id=task.task_id, status="SUCCESS")
+
+        assert completed.duration_seconds is not None
+        assert completed.duration_seconds >= 0.0
+
+    def test_reset_session(self, temp_logs_dir: Path):
+        orchestrator = GFFOrchestrator(logs_dir=temp_logs_dir)
+        orchestrator.start_session(session_id="run_reset_test", gff_list=["Task_1"], force_new=True)
+        assert orchestrator.get_current_session() is not None
+
+        orchestrator.reset_session()
+        assert orchestrator.get_current_session() is None
+        assert orchestrator.get_task("GFF_001") is None
+
+    def test_get_next_task_auto_starts_session(self, temp_logs_dir: Path, sample_gff_file: Path):
+        settings = Settings(logs_dir_override=temp_logs_dir, input_gff_path=sample_gff_file)
+        orchestrator = GFFOrchestrator(settings=settings, logs_dir=temp_logs_dir)
+        assert orchestrator.get_current_session() is None
+
+        task = orchestrator.get_next_task()
+        assert task is not None
+        assert orchestrator.get_current_session() is not None
+        assert task.name == "A16_4LA_91____1_518_88_Check_battery"
+
+    def test_find_latest_session_state_edge_cases(self, tmp_path: Path):
+        non_existent_dir = tmp_path / "does_not_exist"
+        orchestrator = GFFOrchestrator(logs_dir=non_existent_dir)
+        assert orchestrator.find_latest_session_state() is None
+
+        empty_dir = tmp_path / "empty_logs"
+        empty_dir.mkdir()
+        orchestrator_empty = GFFOrchestrator(logs_dir=empty_dir)
+        assert orchestrator_empty.find_latest_session_state() is None
+
+    def test_start_session_empty_list(self, temp_logs_dir: Path):
+        orchestrator = GFFOrchestrator(logs_dir=temp_logs_dir)
+        session = orchestrator.start_session(session_id="run_empty", gff_list=[], force_new=True)
+        assert session.total_gff == 0
+        assert session.is_completed is True
+        assert orchestrator.get_next_task() is None

@@ -109,7 +109,9 @@ class TextCleaner:
             settings: Settings instance.
         """
         self.settings = settings or get_settings()
-        self.target_keyword = target_keyword or self.settings.target_keyword
+        self.target_keyword = (
+            target_keyword if target_keyword is not None else self.settings.target_keyword
+        )
 
     def mask_protected_tokens(self, text: str) -> Tuple[str, List[str]]:
         """Identify and replace all protected tokens with non-word boundary placeholders.
@@ -182,10 +184,10 @@ class TextCleaner:
         escaped = re.escape(keyword)
 
         return [
-            # Compound with hyphen prefix: 'Lamborghini-Test' -> 'Test'
-            (re.compile(rf"\b{escaped}[ \t]*-(?=[A-Za-z0-9_])", re.IGNORECASE), ""),
-            # Compound with hyphen suffix: 'Test-Lamborghini' -> 'Test'
-            (re.compile(rf"(?<=[A-Za-z0-9_])-[ \t]*{escaped}\b", re.IGNORECASE), ""),
+            # Compound with hyphen prefix: 'Lamborghini-Test' or 'Lamborghini - Test' -> 'Test'
+            (re.compile(rf"\b{escaped}[ \t]*-[ \t]*(?=[A-Za-z0-9_])", re.IGNORECASE), ""),
+            # Compound with hyphen suffix: 'Test-Lamborghini' or 'Test - Lamborghini' -> 'Test'
+            (re.compile(rf"(?<=[A-Za-z0-9_])[ \t]*-[ \t]*{escaped}\b", re.IGNORECASE), ""),
             # Possessive with apostrophe: "Lamborghini's" or "Lamborghini’s"
             (re.compile(rf"\b{escaped}['’]s\b[ \t]*", re.IGNORECASE), ""),
             # Possessive or plural form 'Lamborghinis'
@@ -293,7 +295,16 @@ class TextCleaner:
                 protected_tokens=[],
             )
 
-        keyword = target_keyword or self.target_keyword
+        keyword = target_keyword if target_keyword is not None else self.target_keyword
+        if not keyword or not keyword.strip():
+            return TextCleanResult(
+                raw_text=raw_text,
+                cleaned_text=raw_text,
+                modified=False,
+                occurrences_removed=0,
+                block_type=block_type,
+                protected_tokens=[],
+            )
 
         # Step 1: Mask protected tokens (macros, variables, markup)
         masked_text, protected_tokens = self.mask_protected_tokens(raw_text)

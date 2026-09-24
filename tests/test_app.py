@@ -477,3 +477,84 @@ class TestEndToEndBatchWorkflow:
         assert summary["pending"] == 0
         assert summary["total_blocks_modified"] == 3
         assert summary["is_completed"] is True
+
+
+class TestAdditionalEndpointsAndEdgeCases:
+    """Additional edge cases for API endpoints."""
+
+    def test_health_with_active_session(self, test_app_and_client):
+        client = test_app_and_client["client"]
+        orchestrator = test_app_and_client["orchestrator"]
+        orchestrator.start_session(session_id="run_active_health", gff_list=["Task_1"], force_new=True)
+
+        response = client.get("/api/v1/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["session_active"] is True
+        assert data["session_id"] == "run_active_health"
+
+    def test_session_start_from_file_via_api(self, test_app_and_client, tmp_path: Path):
+        client = test_app_and_client["client"]
+        sample_file = tmp_path / "custom_gff.txt"
+        sample_file.write_text("Custom_Func_1\nCustom_Func_2\n", encoding="utf-8")
+
+        payload = {
+            "session_id": "run_custom_file",
+            "input_file": str(sample_file),
+            "force_new": True,
+        }
+        response = client.post("/api/v1/session/start", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["session_id"] == "run_custom_file"
+        assert data["total_gff"] == 2
+
+    def test_session_start_error_returns_500(self, test_app_and_client):
+        client = test_app_and_client["client"]
+        orchestrator = test_app_and_client["orchestrator"]
+
+        with patch.object(orchestrator, "start_session", side_effect=RuntimeError("Disk failure")):
+            response = client.post("/api/v1/session/start", json={"force_new": True})
+            assert response.status_code == 500
+            assert "Failed to start session" in response.json()["detail"]
+
+    def test_tasks_complete_no_active_session_returns_400(self, test_app_and_client):
+        client = test_app_and_client["client"]
+        payload = {
+            "task_id": "GFF_001",
+            "status": "SUCCESS",
+        }
+        response = client.post("/api/v1/tasks/complete", json=payload)
+        assert response.status_code == 400
+
+    def test_tasks_complete_skipped(self, test_app_and_client):
+        client = test_app_and_client["client"]
+        orchestrator = test_app_and_client["orchestrator"]
+        orchestrator.start_session(session_id="run_skip_api", gff_list=["Task_Skip"], force_new=True)
+
+        task = orchestrator.get_next_task()
+        payload = {
+            "task_id": task.task_id,
+            "status": "SKIPPED",
+        }
+        response = client.post("/api/v1/tasks/complete", json=payload)
+        assert response.status_code == 200
+        assert response.json()["task_status"] == "SKIPPED"
+
+    def test_analyze_canvas_generic_exception_500(self, test_app_and_client):
+        client = test_app_and_client["client"]
+        mock_vision = test_app_and_client["mock_vision_engine"]
+        mock_vision.analyze_canvas.side_effect = Exception("Unexpected failure")
+
+        response = client.post("/api/v1/vision/analyze-canvas", json={"image_base64": "dummy"})
+        assert response.status_code == 500
+        assert "Canvas analysis failed" in response.json()["detail"]
+
+    def test_detect_popup_generic_exception_500(self, test_app_and_client):
+        client = test_app_and_client["client"]
+        mock_vision = test_app_and_client["mock_vision_engine"]
+        mock_vision.detect_popup.side_effect = Exception("Popup processing crashed")
+
+        response = client.post("/api/v1/vision/detect-popup", json={"image_base64": "dummy"})
+        assert response.status_code == 500
+        assert "Popup detection failed" in response.json()["detail"]

@@ -198,8 +198,9 @@ async def lifespan(app: FastAPI):
     try:
         latest = orchestrator.find_latest_session_state()
         if latest and latest.exists():
-            orchestrator.start_session(resume=True)
-            logger.info(f"Auto-resumed latest session: {orchestrator.current_session.session_id}")
+            resumed = orchestrator.start_session(resume=True)
+            if resumed:
+                logger.info(f"Auto-resumed latest session: {resumed.session_id}")
     except Exception as exc:
         logger.warning(f"Could not auto-resume session on startup: {exc}")
     yield

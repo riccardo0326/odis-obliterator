@@ -1,341 +1,304 @@
-# ODIS Obliterator – Manuale Operativo & Guida al Setup
+# ODIS Obliterator - Manuale Operativo
 
-Sistema distribuito di automazione robotica e intelligenza artificiale per l'elaborazione batch e la bonifica testuale delle funzioni diagnostiche (GFF / Diagnostic Objects) in **ODIS Creator**.
+ODIS Obliterator automatizza la rimozione del testo `Lamborghini` dai blocchi
+`Message`, `Question` e `Comment` di ODIS Creator. La configurazione primaria e
+raccomandata e **Standalone Local sul PC Lamborghini**: non richiede rete LAN,
+VPN, server FastAPI o gateway AI.
 
----
+La modalita distribuita con Controller EDAG resta disponibile come configurazione
+legacy/opzionale, ma non e necessaria per l'elaborazione locale.
 
 ## Indice dei Contenuti
 
-1. [Panoramica e Obiettivo del Progetto](#1-panoramica-e-obiettivo-del-progetto)
-2. [Architettura Distribuita & Topologia di Rete](#2-architettura-distribuita--topologia-di-rete)
-3. [Setup Ambiente su PC EDAG (Controller & AI Brain)](#3-setup-ambiente-su-pc-edag-controller--ai-brain)
-   - [3.1 Requisiti e Installazione](#31-requisiti-e-installazione)
-   - [3.2 Configurazione Kelpie AI Gateway (`gemini-3.7-flash`)](#32-configurazione-kelpie-ai-gateway-gemini-37-flash)
-   - [3.3 Configurazione Variabili d'Ambiente](#33-configurazione-variabili-dambiente)
-   - [3.4 Avvio del Server Controller](#34-avvio-del-server-controller)
-   - [3.5 Verifica dello Stato e Documentazione Swagger](#35-verifica-dello-stato-e-documentazione-swagger)
-4. [Setup Ambiente su PC Lamborghini (Worker UI)](#4-setup-ambiente-su-pc-lamborghini-worker-ui)
-   - [4.1 Requisiti e Installazione](#41-requisiti-e-installazione)
-   - [4.2 Preparazione dell'Ambiente ODIS Creator](#42-preparazione-dellambiente-odis-creator)
-   - [4.3 Test di Connettività verso il Controller](#43-test-di-connettività-verso-il-controller)
-5. [Guida Operativa: Esecuzione del Batch](#5-guida-operativa-esecuzione-del-batch)
-   - [5.1 Preparazione della Coda GFF (`data/input_gff.txt`)](#51-preparazione-della-coda-gff-datainput_gfftxt)
-   - [5.2 Esecuzione in Modalità Dry-Run (Simulazione Sicura)](#52-esecuzione-in-modalità-dry-run-simulazione-sicura)
-   - [5.3 Esecuzione in Modalità Produzione (Live)](#53-esecuzione-in-modalità-produzione-live)
-   - [5.4 Parametri e Opzioni CLI del Worker](#54-parametri-e-opzioni-cli-del-worker)
-6. [Workflow Operativo End-to-End (14 Passaggi)](#6-workflow-operativo-end-to-end-14-passaggi)
-   - [6.1 Sintesi dei Passaggi](#61-sintesi-dei-passaggi)
-   - [6.2 Invarianti e Conservazione dei Tag](#62-invarianti-e-conservazione-dei-tag)
-7. [Logging, Reportistica & Ripristino Sessione (Resume)](#7-logging-reportistica--ripristino-sessione-resume)
-   - [7.1 Struttura della Cartella `/logs`](#71-struttura-della-cartella-logs)
-   - [7.2 Ripristino Automatico da Interruzione (Resume)](#72-ripristino-automatico-da-interruzione-resume)
-8. [Risoluzione dei Problemi Comuni (Troubleshooting)](#8-risoluzione-dei-problemi-comuni-troubleshooting)
-9. [Esecuzione dei Test Unitari e di Integrazione](#9-esecuzione-dei-test-unitari-e-di-integrazione)
-
----
+1. [Panoramica](#1-panoramica)
+2. [Standalone Local](#2-standalone-local-pc-lamborghini)
+3. [Quickstart Operativo](#3-quickstart-operativo)
+4. [CLI Standalone](#4-cli-standalone)
+5. [Workflow ODIS Creator](#5-workflow-odis-creator)
+6. [Logging, Report e Resume](#6-logging-report-e-resume)
+7. [Troubleshooting](#7-troubleshooting)
+8. [Test](#8-test)
+9. [Modalita Distribuita Legacy](#9-modalita-distribuita-legacy)
 
 ## 1. Panoramica e Obiettivo del Progetto
 
-**ODIS Obliterator** è stato concepito per automatizzare la bonifica testuale massiva su oltre 800 funzioni diagnostiche all'interno dell'editor grafico **ODIS Creator**.
+Il sistema elabora una lista di funzioni GFF, una per riga, nel file
+`data/input_gff.txt`. Per ogni funzione:
 
-### Obiettivi Principali:
-- **Rimozione selettiva del termine `"Lamborghini"`** dai blocchi funzionali:
-  - `Message` (messaggi informativi e istruzioni operatore per ODIS Service)
-  - `Question` (domande interattive con opzioni Yes/No o selezione da lista)
-  - `Comment` (commenti e annotazioni interne alla struttura)
-- **Inviolabilità dei metadati tecnici:** conservazione rigorosa di tag macro (es. `@[std]AU00003_Ende`) e variabili di sistema (es. `%str_Bauteil%`, `%str_Steuergeraet%`).
-- **Tracciabilità automatica delle versioni:** inserimento della nota standard `"Removed Lamborghini labels"` nel campo `Version comment:`.
-- **Controllo visivo con Vision LLM:** analisi del canvas grafico tramite il modello multimodale `gemini-3.7-flash` (via Kelpie AI Gateway) per il calcolo normalizzato delle coordinate dei blocchi da modificare.
-
----
+- apre la funzione in ODIS Creator;
+- individua localmente le icone `Message`, `Question` e `Comment`;
+- rimuove solo `Lamborghini` dal testo;
+- conserva macro come `@[std]AU00003_Ende` e variabili come `%str_Bauteil%`;
+- inserisce `Removed Lamborghini labels` nel campo `Version comment:`;
+- salva, chiude e registra il risultato.
 
 ## 2. Architettura Distribuita & Topologia di Rete
 
-Il sistema adotta un'architettura distribuita a **due macchine Windows** connesse alla medesima rete locale Wi-Fi:
+La topologia raccomandata e Standalone Local: entrambe le componenti girano sul
+PC Lamborghini e non esiste un collegamento Controller/Worker. La topologia
+distribuita legacy e descritta nella sezione 9.
+
+## 2.1 Standalone Local (PC Lamborghini)
+
+### Requisiti
+
+- Windows 10/11;
+- Python 3.10 o successivo;
+- ODIS Creator installato e configurato;
+- ODIS Creator aperto in primo piano nella vista `Editing`;
+- nessuna connettivita di rete richiesta.
+
+La configurazione distribuita legacy espone invece il controllo
+`/api/v1/health` e la documentazione Swagger su `/docs` sul Controller FastAPI.
+
+Il motore `LocalVisionEngine` usa i template in `assets/icons/` e il matching
+locale Pillow, con deduplicazione e coordinate normalizzate. Il testo viene
+pulito da `TextCleaner` in-process. La pipeline standalone non avvia FastAPI e
+non effettua chiamate HTTP.
+
+### Struttura rilevante
 
 ```text
-┌────────────────────────────────────────────────────────────────────────┐
-│ PC 1: Worker (PC Lamborghini)                                          │
-│ - Connessione: VPN Lamborghini                                         │
-│ - Applicazioni: ODIS Creator (aperto in primo piano), Agent Worker     │
-│ - Responsabilità: Acquisizione screenshot canvas, click UI, digitazione│
-└───────────────────────────────────▲────────────────────────────────────┘
-                                    │
-                                    │ Chiamate HTTP REST Dirette
-                                    │ (LAN Wi-Fi locale, es. porta 8000)
-                                    │
-┌───────────────────────────────────▼────────────────────────────────────┐
-│ PC 2: Controller & AI Brain (PC EDAG)                                  │
-│ - Connessione: VPN EDAG (Germania)                                     │
-│ - Applicazioni: Controller FastAPI, Orchestratore GFF, Kelpie Gateway  │
-│ - Modello AI: gemini-3.7-flash (Vision multimodale)                    │
-│ - Responsabilità: Coda GFF, calcolo coordinate, sanitizzazione, logs   │
-└────────────────────────────────────────────────────────────────────────┘
+assets/icons/                 Template Message/Question/Comment
+data/input_gff.txt            Coda GFF, una funzione per riga
+worker/standalone.py          CLI e orchestratore locale
+worker/local_vision.py        Visione locale offline
+worker/workflow_runner.py     Workflow UI di 14 passaggi
+logs/run_YYYY-MM-DD_HH-mm-ss/ State, log, report e screenshot
+wheels/                       Bundle dipendenze offline
 ```
-
-### Configurazione di Rete:
-1. Entrambi i PC devono essere collegati alla **stessa rete Wi-Fi locale** (o rete LAN cablata).
-2. Sul **PC EDAG (Controller)**, determinare l'indirizzo IP locale eseguendo in PowerShell:
-   ```powershell
-   ipconfig
-   ```
-   Individuare l'indirizzo IPv4 della scheda Wi-Fi (es. `192.168.1.105` o `10.0.0.50`).
-3. Verificare che il Firewall di Windows sul PC EDAG consenta connessioni in ingresso sulla porta **8000** (e facoltativamente **18080** se si usa il proxy Kelpie locale).
-
----
 
 ## 3. Setup Ambiente su PC EDAG (Controller & AI Brain)
 
-Il PC EDAG ospita il server REST FastAPI, il motore di orchestrazione della coda di lavoro e il client verso Kelpie AI Gateway.
+Questa installazione e opzionale e serve solo alla modalita distribuita legacy.
+Il PC EDAG richiede rete, Kelpie autenticato, e il Controller FastAPI.
 
-### 3.1 Requisiti e Installazione
-- **Sistema Operativo:** Windows 10 / 11
-- **Python:** Versione 3.10 o successiva
-- **VPN:** EDAG attiva (necessaria per raggiungere il gateway Kelpie)
+## 3.1 Quickstart Operativo Standalone
 
-Clonare il repository o copiare la cartella di progetto, quindi installare le dipendenze:
+### Passo 1 - Copiare il progetto
+
+Copiare l'intera cartella del progetto sul PC Lamborghini, inclusa la directory
+`wheels/`. Esempio:
+
 ```powershell
-cd C:\Users\rp99480\dev\odis-obliterator
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+Copy-Item -Recurse C:\sorgente\odis-obliterator C:\Tools\odis-obliterator
+Set-Location C:\Tools\odis-obliterator
 ```
 
-### 3.2 Configurazione Kelpie AI Gateway (`gemini-3.7-flash`)
-Assicurarsi che la CLI di Kelpie sia installata e autenticata con le credenziali aziendali EDAG:
+Non e necessario clonare repository o raggiungere internet sul PC target.
+
+### Passo 2 - Installare le dipendenze offline
+
+Eseguire dalla radice del progetto:
+
 ```powershell
-kelpie auth login
+python -m pip install --no-index --find-links=wheels -r requirements.txt
 ```
 
-È possibile verificare il token o avviare il proxy locale di Kelpie sulla porta `18080`:
-```powershell
-kelpie serve run -p 18080
-```
-In alternativa, il client utilizzerà direttamente il token generato da `kelpie auth print-access-token`.
+Il comando usa esclusivamente i pacchetti presenti in `wheels/`. Se un wheel
+manca, fermarsi e completare il bundle su una macchina autorizzata prima di
+procedere.
 
-### 3.3 Configurazione Variabili d'Ambiente
-Creare o modificare il file `.env` nella radice del progetto:
-```ini
-# Configurazione Controller FastAPI
-CONTROLLER_HOST=0.0.0.0
-CONTROLLER_PORT=8000
+### Passo 3 - Preparare la coda GFF
 
-# Kelpie Gateway & Modello Multimodale
-KELPIE_BASE_URL=https://oauth.ai.container.edag
-KELPIE_PROXY_URL=http://127.0.0.1:18080
-KELPIE_MODEL=gemini-3.7-flash
-TIMEOUT=60.0
+Modificare `data/input_gff.txt` e inserire il nome completo di ogni funzione:
 
-# Parametri di Dominio
-TARGET_KEYWORD=Lamborghini
-VERSION_COMMENT=Removed Lamborghini labels
-DRY_RUN=false
-```
-
-### 3.4 Avvio del Server Controller
-Avviare il server FastAPI in ascolto su tutte le interfacce (`0.0.0.0`):
-```powershell
-python -m uvicorn controller.app:app --host 0.0.0.0 --port 8000
-```
-All'avvio, il controller verificherà la disponibilità di sessioni precedenti non completate per l'eventuale ripristino automatico.
-
-### 3.5 Verifica dello Stato e Documentazione Swagger
-- **Swagger UI:** Aprire il browser all'indirizzo `http://localhost:8000/docs`
-- **Health Check:** `http://localhost:8000/api/v1/health` (dovrà restituire `{"status": "ok", "kelpie": "connected", "model": "gemini-3.7-flash"}`)
-
----
-
-## 4. Setup Ambiente su PC Lamborghini (Worker UI)
-
-Il PC Lamborghini esegue l'applicativo **ODIS Creator** e l'agente Python che simula le azioni utente e acquisisce gli screenshot del canvas.
-
-### 4.1 Requisiti e Installazione
-- **Sistema Operativo:** Windows 10 / 11
-- **Python:** Versione 3.10 o successiva
-- **ODIS Creator:** Installato e configurato
-- **VPN:** Lamborghini attiva
-
-Installare le dipendenze sul PC Lamborghini:
-```powershell
-cd C:\percorso\odis-obliterator
-python -m pip install -r requirements.txt
-```
-
-### 4.2 Preparazione dell'Ambiente ODIS Creator
-1. Avviare **ODIS Creator**.
-2. Massimizzare la finestra principale a schermo intero (risoluzione consigliata: 1920x1080, scaling 100%).
-3. Verificare che l'applicazione sia posizionata nella vista iniziale **`Editing`** con la scheda **`Knowledge base`** attiva.
-4. Non sovrapporre altre finestre a ODIS Creator durante l'esecuzione live.
-
-### 4.3 Test di Connettività verso il Controller
-Prima di avviare il workflow, testare la raggiungibilità del Controller dal PC Lamborghini:
-```powershell
-python -m worker.agent --controller-url http://192.168.1.105:8000 --health-only
-```
-*(Sostituire `192.168.1.105` con l'IP effettivo del PC EDAG).*
-
-Se il test ha successo, verrà stampato lo stato di connessione `Controller Health: {'status': 'ok', ...}`.
-
----
-
-## 5. Guida Operativa: Esecuzione del Batch
-
-### 5.1 Preparazione della Coda GFF (`data/input_gff.txt`)
-Inserire i nomi completi degli oggetti diagnostici da processare all'interno del file `data/input_gff.txt` sul PC EDAG, uno per riga:
 ```text
-# Esempio lista funzioni GFF
+# Le righe vuote e i commenti vengono ignorati
 A16_4LA_91____1_518_88_Check_battery
 LB63x_01____2_100_01_Engine_control
 AU58x_09____3_400_12_Transmission_check
 ```
-Le righe vuote o che iniziano con `#` vengono automaticamente ignorate.
 
----
+Verificare prima dell'avvio che i nomi corrispondano agli oggetti presenti in
+ODIS Creator.
 
-### 5.2 Esecuzione in Modalità Dry-Run (Simulazione Sicura)
-La modalità **Dry-Run** consente di collaudare l'intero flusso di comunicazione e l'analisi visiva di `gemini-3.7-flash` **senza inviare click fisici o modificare i dati in ODIS Creator**.
+### Passo 4 - Preparare ODIS Creator
 
-Sul PC Lamborghini:
+1. Avviare ODIS Creator.
+2. Massimizzare la finestra e non sovrapporre altre finestre.
+3. Impostare scaling Windows al 100% per una calibrazione standard.
+4. Portarsi nella vista iniziale `Editing`, con `Knowledge base` attivo.
+5. Non usare mouse o tastiera mentre il processo live e in esecuzione.
+
+### Passo 5 - Eseguire il test simulato (Dry-Run)
+
 ```powershell
-python -m worker.agent --controller-url http://192.168.1.105:8000 --dry-run --verbose
+python -m worker.standalone --dry-run
 ```
 
-In modalità Dry-Run:
-- Le chiamate REST, il download dei task, l'analisi del canvas e la logica di sanitizzazione vengono eseguiti regolarmente.
-- Le azioni fisiche (click del mouse, inserimento tastiera, salvataggi) vengono registrate solo a livello di log interno senza interagire con il sistema operativo.
+Per una verifica limitata:
 
----
-
-### 5.3 Esecuzione in Modalità Produzione (Live)
-Quando il collaudo in Dry-Run è verificato con successo, avviare l'elaborazione reale:
-
-Sul PC Lamborghini:
 ```powershell
-python -m worker.agent --controller-url http://192.168.1.105:8000 --no-dry-run
+python -m worker.standalone --dry-run --max-tasks 1 --verbose
 ```
 
-L'agente:
-1. Richiede al Controller il prossimo task dalla coda.
-2. Esegue la sequenza dei 14 passaggi su ODIS Creator.
-3. Modifica i blocchi contenenti "Lamborghini" e compila il commento di versione `"Removed Lamborghini labels"`.
-4. Notifica l'esito al Controller e ripete il ciclo fino allo svuotamento della coda.
+Il dry-run esegue la coda e registra le azioni senza inviare click, digitazione
+o salvataggi fisici. Verificare i file nella sessione `logs/` prima del live.
 
----
+### Passo 6 - Eseguire l'elaborazione reale
 
-### 5.4 Parametri e Opzioni CLI del Worker
-L'agente Worker supporta i seguenti parametri da riga di comando:
+```powershell
+python -m worker.standalone
+```
 
-| Parametro | Descrizione | Default |
-|---|---|---|
-| `--controller-url`, `-c` | URL base dell'API del Controller | `http://127.0.0.1:8000` |
-| `--dry-run` | Attiva la modalità di simulazione senza modifiche fisiche | `False` |
-| `--no-dry-run` | Attiva la modalità reale di produzione | `True` (se non specificato diversamente) |
-| `--poll-interval`, `-p` | Intervallo di polling tra un task e il successivo (in secondi) | `1.0` |
-| `--max-tasks`, `-n` | Limite massimo di task da elaborare prima di uscire | Tutti i task in coda |
-| `--health-only` | Esegue solo il check di connettività verso il Controller ed esce | `False` |
-| `--verbose`, `-v` | Abilita il logging dettagliato (DEBUG) | `False` (INFO) |
+La modalita live invia le azioni a ODIS Creator. L'alternativa esplicita e:
 
----
+```powershell
+python -m worker.standalone --live
+```
+
+Questa e l'esecuzione di **Produzione**: usarla solo dopo aver verificato il
+dry-run e il contenuto della coda.
+
+Per interrompere in sicurezza usare `Ctrl+C`. Non chiudere forzatamente il
+processo durante un salvataggio: lo stato viene comunque persistito e il resume
+resetta il task interrotto al prossimo avvio.
+
+## 4. Setup Ambiente su PC Lamborghini (Worker UI)
+
+Per la configurazione primaria seguire il quickstart sopra: il worker standalone
+e locale e non richiede `--controller-url` o `--health-only`.
+
+## 4.1 CLI Standalone
+
+| Opzione | Descrizione |
+|---|---|
+| `--dry-run` | Simula le azioni UI senza click fisici |
+| `--live`, `--no-dry-run` | Esecuzione reale su ODIS Creator |
+| `--input-file`, `-i` | File GFF alternativo; default `data/input_gff.txt` |
+| `--max-tasks`, `-n` | Numero massimo di task per questa esecuzione |
+| `--force-new` | Ignora il checkpoint piu recente e crea una nuova sessione |
+| `--verbose`, `-v` | Abilita log console a livello DEBUG |
+
+Esempio con file alternativo:
+
+```powershell
+python -m worker.standalone --dry-run -i data\smoke_gff.txt -n 5
+```
+
+`--dry-run` e `--live` sono mutuamente esclusivi. Senza nessuna opzione di
+modalita viene usata l'esecuzione live.
+
+## 5. Guida Operativa: Esecuzione del Batch
+
+Il batch standalone si avvia con `python -m worker.standalone`. Le istruzioni
+complete sono nella sezione 3.1.
+
+## 5.1 Workflow ODIS Creator
+
+Per ogni GFF vengono eseguiti i 14 passaggi definiti in `WORKFLOW.md`:
+
+1. Home/Editing View e focus della finestra.
+2. Apertura Full Text Search e inserimento del nome funzione.
+3. Chiusura del popup `Search ended`.
+4. Apertura del risultato e selezione della usage location.
+5. Apertura di `Test sequence`.
+6. Minimizzazione dei pannelli secondari.
+7. Espansione e scansione locale del canvas.
+8. Apertura dei blocchi target e lettura del testo.
+9. Bonifica deterministica di `Message`, `Comment`, `Question`.
+10. Gestione dell'eventuale popup `Validation error`.
+11. Chiusura e salvataggio del Test Module.
+12. Inserimento di `Removed Lamborghini labels`.
+13. Salvataggio e chiusura dell'oggetto.
+14. Verifica del ritorno alla Home e aggiornamento dello stato.
+
+I blocchi `If`, `Subroutine`, `Expression`, `Read file`, `Write file` e `Set
+status` non sono target. Macro, variabili, tag Rich Text e opzioni di risposta
+non vengono rimossi.
 
 ## 6. Workflow Operativo End-to-End (14 Passaggi)
 
-### 6.1 Sintesi dei Passaggi
-Per ogni GFF della lista, il sistema esegue rigidamente la seguente sequenza:
+La sequenza operativa completa e riportata nella sezione 5.1.
 
-1. **Passo 0 (Home):** Verifica dello stato pronto nella schermata iniziale `Editing`.
-2. **Passo 1 (Ricerca):** Click sull'11° pulsante della toolbar (icona torcia gialla) e selezione del tab `Full Text Search`.
-3. **Passo 2 (Input Search):** Digitazione del nome della funzione nel campo `Search text:` e conferma con `OK`.
-4. **Passo 3 (Chiusura Popup):** Click su `OK` nel popup modale `Search ended`.
-5. **Passo 4 (Selezione Risultato):** Doppio click sulla riga corrispondente (`Function test`) nella griglia `Search Results`.
-6. **Passo 5 (Usage Locations):** Selezione del primo risultato nella gerarchia, conferma con `OK` e attesa espansione albero.
-7. **Passo 6 (Test Sequence):** Click con tasto destro sull'area grigia della scheda aperta e selezione di `Test sequence`.
-8. **Passo 7 (Minimizzazione Pannelli):** Click su `Minimize` (`_`) su `Palette`, `Search Results` e `Recently-Used Objects`.
-9. **Passo 8 (Espansione Canvas):** Click sullo sfondo bianco della colonna centrale dei Test Step per aprire l'intero grafo.
-10. **Passi 9-11 (Scansione & Editing Blocchi Target):**
-    - Analisi visiva dello screenshot canvas inviato a `gemini-3.7-flash`.
-    - Apertura ed editing selettivo dei blocchi rilevati:
-      - **`Message`:** Rimozione di "Lamborghini", preservando tag `@[std]...` e Rich Text.
-      - **`Comment`:** Rimozione di "Lamborghini" dal testo del commento.
-      - **`Question`:** Rimozione di "Lamborghini", preservando variabili `%str_...%` e opzioni di risposta.
-11. **Passo 12 (Chiusura Modulo & Salvataggio):** Click sulla `X` della tab `[Nome_Funzione] (Test module)` e click su `Save`.
-12. **Passo 13 (Version Comment):** Click sul box giallo `Version comment:` e digitazione della stringa `"Removed Lamborghini labels"`.
-13. **Passo 14 (Chiusura Scheda & Ritorno a Home):** Click sulla `X` della scheda oggetto, click su `Save` e verifica del ritorno allo stato iniziale (Passo 0).
+## 6.1 Logging, Report e Resume
 
----
+Ogni sessione crea:
 
-### 6.2 Invarianti e Conservazione dei Tag
-Durante la pulizia testuale:
-- **Macro e Tag di Sistema:** Stringhe come `@[std]AU00003_Ende` **NON DEVONO MAI** essere alterate o rimosse.
-- **Variabili Dinamiche:** Segnaposto come `%str_Bauteil%`, `%str_Steuergeraet%` e `%num_...%` rimangono intatti.
-- **Punteggiatura e Formattazione:** Gli a capo multipli e la punteggiatura circostante vengono ripuliti in modo armonico senza spezzare la semantica del messaggio.
+```text
+logs/run_YYYY-MM-DD_HH-mm-ss/
+  state.json       Stato persistente di ogni GFF
+  execution.log    Eventi cronologici della sessione
+  summary.json     Totali, successi, errori e blocchi modificati
+  errors/          Screenshot diagnostici degli errori UI
+```
 
----
+Consultare il report con PowerShell:
+
+```powershell
+Get-Content logs\run_YYYY-MM-DD_HH-mm-ss\summary.json
+Get-Content logs\run_YYYY-MM-DD_HH-mm-ss\execution.log
+```
+
+Il resume e automatico: al riavvio vengono saltati i task `SUCCESS`, mentre i
+task lasciati `IN_PROGRESS` da un arresto vengono riportati a `PENDING`. Per
+ricominciare da zero usare `--force-new`. Non cancellare `state.json` se si
+vuole conservare il resume.
 
 ## 7. Logging, Reportistica & Ripristino Sessione (Resume)
 
-### 7.1 Struttura della Cartella `/logs`
-Ad ogni avvio di sessione batch, il Controller crea una sottocartella dedicata all'interno di `logs/`:
+La sessione standalone salva sempre `state.json`, `execution.log`, `summary.json`
+ed eventuali screenshot sotto `logs/`.
 
-```text
-logs/
-└── run_YYYY-MM-DD_HH-mm-ss/
-    ├── summary.json          # Metriche complessive (totale, successi, falliti, tempo, blocchi modificati)
-    ├── state.json            # Snapshot persistente dello stato di ogni singolo task
-    ├── execution.log         # Log cronologico dettagliato riga per riga
-    └── errors/               # Screenshot ad alta risoluzione catturati in caso di anomalie
-        ├── [Nome_Funzione]_[timestamp].png
-        └── ...
-```
+## 7.1 Troubleshooting
 
-#### Esempio di `summary.json`:
-```json
-{
-  "total": 842,
-  "success": 839,
-  "failed": 3,
-  "skipped": 0,
-  "start_time": "2026-09-22T15:00:00Z",
-  "end_time": "2026-09-22T18:45:00Z",
-  "total_blocks_modified": 1420,
-  "is_completed": true
-}
-```
-
----
-
-### 7.2 Ripristino Automatico da Interruzione (Resume)
-In caso di arresto imprevisto (es. interruzione di rete, chiusura accidentale o riavvio):
-1. Riavviare il Controller: l'Orchestratore carica automaticamente l'ultimo `state.json` presente in `/logs`.
-2. I task completati con stato `SUCCESS` rimangono marcati come tali e **non vengono ripetuti**.
-3. I task interrotti a metà (stato `IN_PROGRESS`) vengono reimpostati su `PENDING` per essere rielaborati in modo pulito e sicuro.
-4. Riavviando il Worker, l'elaborazione riprenderà istantaneamente dal primo task non completato.
-
----
+| Problema | Causa o soluzione |
+|---|---|
+| Template non caricati | Verificare `assets/icons/icon_message.png`, `icon_question.png`, `icon_comment.png`. |
+| Coordinate disallineate | Massimizzare ODIS Creator e impostare scaling Windows al 100%. |
+| `Validation error` | Il runner chiude il popup e tenta la gestione prevista dal workflow. Controllare `execution.log`. |
+| GFF non trovata | Controllare spelling e contesto dell'oggetto in `data/input_gff.txt`. |
+| Processo interrotto | Riavviare `python -m worker.standalone`; il resume riprende dal task non completato. |
+| Installazione fallita | Verificare che `wheels/` contenga tutti i pacchetti richiesti e ripetere il comando offline. |
+| Errore firewall/controller | La modalita standalone non richiede firewall, LAN, Controller o Kelpie. |
 
 ## 8. Risoluzione dei Problemi Comuni (Troubleshooting)
 
-| Problema Riscontrato | Possibile Causa | Soluzione Consigliata |
-|---|---|---|
-| **Errore di connessione Worker ↔ Controller** | Firewall di Windows attivo o IP non raggiungibile | Verificare con `ping <IP_CONTROLLER>` e aggiungere una regola in ingresso nel Firewall di Windows sul PC EDAG per la porta TCP `8000`. |
-| **Popup "Validation error" in ODIS** | Incoerenza temporanea o validazione campi Rich Text | L'agente include un gestore automatico: clicca `OK` sul popup di errore e corregge il blocco prima di procedere. |
-| **Funzione non trovata (`NOT_FOUND`)** | Nome GFF errato in `input_gff.txt` o oggetto non presente nel DB | Il Controller registra l'anomalia in `execution.log` e prosegue automaticamente con la funzione successiva. |
-| **Kelpie Gateway Error / Timeout** | Token JWT scaduto o VPN EDAG disconnessa | Eseguire nuovamente `kelpie auth login` sul PC EDAG e verificare che la VPN EDAG verso la Germania sia attiva. |
-| **Coordinate disallineate sul Canvas** | Risoluzione o DPI scaling di Windows non impostati al 100% | Impostare lo scaling dello schermo di Windows al 100% (96 DPI) e massimizzare ODIS Creator prima dell'avvio. |
+Consultare la tabella seguente per gli errori operativi piu frequenti.
 
----
+## 8.1 Test
+
+Eseguire la suite completa dalla radice del progetto:
+
+```powershell
+python -m pytest
+```
+
+Test specifici per la configurazione standalone:
+
+```powershell
+python -m pytest tests\test_local_vision.py tests\test_standalone.py -v
+```
 
 ## 9. Esecuzione dei Test Unitari e di Integrazione
 
-Per verificare l'integrità di tutti i moduli software (Controller, Client Kelpie, Text Cleaner, Vision Engine, UI Driver, Workflow Runner e Test di Integrazione End-to-End):
+La suite completa si esegue con `python -m pytest`.
+
+## 9.1 Modalita Distribuita Legacy
+
+La modalita distribuita opzionale usa un PC EDAG con Controller FastAPI e
+Kelpie `gemini-3.7-flash`. E richiesta una rete raggiungibile, la porta `8000`
+e, se usato, il proxy Kelpie `18080`.
+
+Autenticazione e proxy Kelpie sul PC EDAG:
 
 ```powershell
-python -m pytest -v
+kelpie auth login
+kelpie serve run -p 18080
 ```
 
-Per eseguire una verifica specifica dei test di integrazione in modalità Dry-Run:
+Avvio del Controller:
+
 ```powershell
-python -m pytest tests/test_integration_dry_run.py -v
+python -m uvicorn controller.app:app --host 0.0.0.0 --port 8000
 ```
 
----
+Il worker legacy puo essere usato con `worker.agent`, ad esempio:
 
-*Documentazione aggiornata e verificata per ODIS Obliterator Release v1.0.*
+```powershell
+python -m worker.agent --controller-url http://192.168.1.105:8000 --health-only
+```
+
+Questa configurazione non e il percorso raccomandato per il PC Lamborghini:
+per l'elaborazione offline usare sempre `python -m worker.standalone`.

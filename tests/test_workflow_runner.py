@@ -4,6 +4,7 @@ from datetime import datetime
 from unittest.mock import MagicMock, call, patch
 from PIL import Image
 import pytest
+import requests
 
 from controller.config import Settings
 from controller.text_cleaner import TextCleaner, TextCleanResponse
@@ -25,6 +26,7 @@ from worker.workflow_runner import (
     WorkflowStep,
     get_workflow_runner,
 )
+from worker.local_vision import LocalVisionEngine
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +182,95 @@ class TestControllerClient:
             assert res["status"] == "recorded"
             mock_post.assert_called_once()
 
+    def test_check_health(self):
+        client = ControllerClient(base_url="http://127.0.0.1:8000")
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"status": "ok", "version": "1.0.0"}
+        mock_response.raise_for_status.return_value = None
+
+        with patch.object(client.session, "get", return_value=mock_response) as mock_get:
+            res = client.check_health()
+            assert res["status"] == "ok"
+            mock_get.assert_called_once_with("http://127.0.0.1:8000/api/v1/health", timeout=60.0)
+
+    def test_start_session(self):
+        client = ControllerClient(base_url="http://127.0.0.1:8000")
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"session_id": "run_123", "status": "started"}
+        mock_response.raise_for_status.return_value = None
+
+        with patch.object(client.session, "post", return_value=mock_response) as mock_post:
+            res = client.start_session(session_id="run_123", gff_list=["fn1"], resume=True, force_new=False)
+            assert res["session_id"] == "run_123"
+            mock_post.assert_called_once()
+
+    def test_get_next_task_found(self):
+        client = ControllerClient(base_url="http://127.0.0.1:8000")
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"task_id": "GFF_001", "name": "fn1"}
+        mock_response.raise_for_status.return_value = None
+
+        with patch.object(client.session, "get", return_value=mock_response):
+            task = client.get_next_task()
+            assert task is not None
+            assert task["task_id"] == "GFF_001"
+
+    def test_get_next_task_empty_204(self):
+        client = ControllerClient(base_url="http://127.0.0.1:8000")
+        mock_response = MagicMock()
+        mock_response.status_code = 204
+
+        with patch.object(client.session, "get", return_value=mock_response):
+            task = client.get_next_task()
+            assert task is None
+
+    def test_get_session_status(self):
+        client = ControllerClient(base_url="http://127.0.0.1:8000")
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"total": 5, "success": 3}
+        mock_response.raise_for_status.return_value = None
+
+        with patch.object(client.session, "get", return_value=mock_response):
+            res = client.get_session_status()
+            assert res["total"] == 5
+
+    def test_clean_text_api_failure_fallback(self):
+        client = ControllerClient(base_url="http://127.0.0.1:8000")
+        with patch.object(client.session, "post", side_effect=requests.RequestException("Connection refused")):
+            res = client.clean_text("Lamborghini warning notice", block_type="MESSAGE")
+            assert res.modified is True
+            assert "Lamborghini" not in res.cleaned_text
+
+    def test_analyze_canvas_rest_mode(self):
+        client = ControllerClient(base_url="http://127.0.0.1:8000")
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "blocks": [
+                {"type": "MESSAGE", "relative_x": 0.4, "relative_y": 0.3, "label": "Msg 1"}
+            ]
+        }
+        mock_response.raise_for_status.return_value = None
+
+        with patch.object(client.session, "post", return_value=mock_response):
+            blocks = client.analyze_canvas("fake_img_b64", canvas_bbox=CanvasBoundingBox(x=0, y=0, width=100, height=100))
+            assert len(blocks) == 1
+            assert blocks[0].type == BlockType.MESSAGE
+
+    def test_detect_popup_api_failure_fallback(self):
+        client = ControllerClient(base_url="http://127.0.0.1:8000")
+        with patch.object(client.session, "post", side_effect=requests.RequestException("Timeout")):
+            res = client.detect_popup("fake_img_b64")
+            assert res.detected is False
+            assert res.popup_type == PopupType.NONE
+
+    def test_complete_task_api_failure(self):
+        client = ControllerClient(base_url="http://127.0.0.1:8000")
+        with patch.object(client.session, "post", side_effect=requests.RequestException("Network down")):
+            res = client.complete_task("GFF_001", "SUCCESS")
+            assert res["status"] == "unreachable"
+            assert "Network down" in res["error"]
+
 
 # ---------------------------------------------------------------------------
 # Test WorkflowRunner Steps in Isolation
@@ -291,6 +382,74 @@ class TestWorkflowRunnerSteps:
         assert self.runner.current_step == WorkflowStep.STEP_8_EXPAND_CANVAS_AND_SCAN
         self.mock_client.analyze_canvas.assert_called_once()
 
+    def test_step_8_uses_in_process_vision_provider(self):
+        """Standalone mode must bypass ControllerClient canvas analysis."""
+        self.mock_client.analyze_canvas = MagicMock()
+        local_provider = MagicMock(spec=LocalVisionEngine)
+        local_provider.analyze_canvas.return_value = MagicMock(
+            blocks=[
+                DetectedBlock(type=BlockType.COMMENT, relative_x=0.2, relative_y=0.4, label="Comment"),
+            ]
+        )
+        self.runner = WorkflowRunner(
+            ui_driver=self.ui_driver,
+            screen_capture=self.mock_capture,
+            controller_client=self.mock_client,
+            vision_provider=local_provider,
+            coordinates=self.coords,
+            dry_run=True,
+            action_delay=0.0,
+        )
+
+        blocks = self.runner.step_8_expand_canvas_and_scan(task_id="LOCAL_GFF")
+
+        assert len(blocks) == 1
+        assert blocks[0].type == BlockType.COMMENT
+        local_provider.analyze_canvas.assert_called_once_with(
+            image="data:image/png;base64,dummy_b64",
+            canvas_bbox=self.coords.canvas_bbox,
+            task_id="LOCAL_GFF",
+        )
+        self.mock_client.analyze_canvas.assert_not_called()
+
+    def test_step_8_accepts_local_engine_alias(self):
+        """The explicit local_vision_engine alias selects the in-process path."""
+        self.mock_client.analyze_canvas = MagicMock()
+        local_engine = MagicMock(spec=LocalVisionEngine)
+        local_engine.analyze_canvas.return_value = [
+            DetectedBlock(type=BlockType.MESSAGE, relative_x=0.1, relative_y=0.1)
+        ]
+        self.runner = WorkflowRunner(
+            ui_driver=self.ui_driver,
+            screen_capture=self.mock_capture,
+            controller_client=self.mock_client,
+            local_vision_engine=local_engine,
+            coordinates=self.coords,
+            dry_run=True,
+            action_delay=0.0,
+        )
+
+        blocks = self.runner.step_8_expand_canvas_and_scan(task_id="LOCAL_ALIAS_GFF")
+
+        assert len(blocks) == 1
+        assert blocks[0].type == BlockType.MESSAGE
+        local_engine.analyze_canvas.assert_called_once()
+        self.mock_client.analyze_canvas.assert_not_called()
+
+    def test_runner_rejects_two_vision_providers(self):
+        """Provider selection is unambiguous."""
+        with pytest.raises(ValueError, match="either vision_provider or local_vision_engine"):
+            WorkflowRunner(
+                ui_driver=self.ui_driver,
+                screen_capture=self.mock_capture,
+                controller_client=self.mock_client,
+                vision_provider=MagicMock(),
+                local_vision_engine=MagicMock(spec=LocalVisionEngine),
+                coordinates=self.coords,
+                dry_run=True,
+                action_delay=0.0,
+            )
+
     def test_edit_single_block_message_with_modification(self):
         block = DetectedBlock(
             type=BlockType.MESSAGE,
@@ -400,6 +559,48 @@ class TestWorkflowRunnerSteps:
         assert self.ui_driver.action_history[0].params["x"] == self.coords.object_tab_close_x[0]
         assert self.ui_driver.action_history[1].params["x"] == self.coords.save_dialog_save_button[0]
 
+    def test_edit_single_block_live_mode_with_clipboard(self):
+        live_driver = UIDriver(dry_run=False, action_delay=0.0, backend=self.mock_backend)
+        live_runner = WorkflowRunner(
+            ui_driver=live_driver,
+            screen_capture=self.mock_capture,
+            controller_client=self.mock_client,
+            dry_run=False,
+            action_delay=0.0,
+            text_supplier=None,
+        )
+        block = DetectedBlock(
+            type=BlockType.MESSAGE,
+            relative_x=0.45,
+            relative_y=0.32,
+            label="Original label",
+        )
+        with patch("pyperclip.paste", return_value="Live text with Lamborghini entry"):
+            modified = live_runner.edit_single_block(block)
+            assert modified is True
+            assert live_runner.modified_blocks_count["message"] == 1
+
+    def test_edit_single_block_live_mode_clipboard_exception(self):
+        live_driver = UIDriver(dry_run=False, action_delay=0.0, backend=self.mock_backend)
+        live_runner = WorkflowRunner(
+            ui_driver=live_driver,
+            screen_capture=self.mock_capture,
+            controller_client=self.mock_client,
+            dry_run=False,
+            action_delay=0.0,
+            text_supplier=None,
+        )
+        block = DetectedBlock(
+            type=BlockType.MESSAGE,
+            relative_x=0.45,
+            relative_y=0.32,
+            label="Fallback text with Lamborghini",
+        )
+        with patch("pyperclip.paste", side_effect=RuntimeError("Clipboard unavailable")):
+            modified = live_runner.edit_single_block(block)
+            assert modified is True
+            assert live_runner.modified_blocks_count["message"] == 1
+
 
 # ---------------------------------------------------------------------------
 # Test Validation Error Popup Handling and Emergency Recovery
@@ -455,6 +656,11 @@ class TestEdgeCasesAndRecovery:
         self.runner.recover_to_home()
         # Should press Escape 3 times
         self.mock_backend.press_key.assert_called_once_with("esc", presses=3, interval=0.1)
+
+    def test_recover_to_home_handles_exceptions_gracefully(self):
+        self.mock_backend.press_key.side_effect = RuntimeError("Fatal UI error")
+        # Should not raise exception
+        self.runner.recover_to_home()
 
 
 # ---------------------------------------------------------------------------
@@ -545,6 +751,18 @@ class TestWorkflowRunnerFullExecution:
         assert result.error_screenshot_base64 is not None
         assert WorkflowStep.STEP_0_HOME in result.steps_completed
         assert WorkflowStep.STEP_1_OPEN_SEARCH in result.steps_completed
+
+    def test_run_task_failure_when_screen_capture_fails(self):
+        task_id = "GFF_ERR"
+        gff_name = "Capture_Error_Function"
+
+        self.runner.step_1_open_search = MagicMock(side_effect=RuntimeError("UI blocked"))
+        self.mock_capture.capture_as_base64.side_effect = RuntimeError("Screen capture failure")
+
+        result = self.runner.run_task(task_id=task_id, gff_name=gff_name)
+        assert result.status == "FAILED"
+        assert result.error_screenshot_base64 is None
+        assert "UI blocked" in result.error_details
 
 
 # ---------------------------------------------------------------------------

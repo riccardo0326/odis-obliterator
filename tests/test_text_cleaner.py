@@ -393,3 +393,127 @@ def test_case_25_question_block_with_selection_syntax():
     assert res.modified is True
     assert res.cleaned_text == expected
 
+
+# ---------------------------------------------------------------------------
+# Case 26: Empty / Whitespace Target Keyword Guard
+# ---------------------------------------------------------------------------
+def test_case_26_empty_or_whitespace_target_keyword():
+    """Verify that passing empty or whitespace-only keyword returns raw text unmodified."""
+    raw_text = "Standard diagnostic routine for Lamborghini."
+    cleaner = TextCleaner(target_keyword="")
+    res = cleaner.clean(raw_text, target_keyword="")
+    assert res.modified is False
+    assert res.cleaned_text == raw_text
+    assert res.occurrences_removed == 0
+
+    cleaner_ws = TextCleaner(target_keyword="   ")
+    res_ws = cleaner_ws.clean(raw_text, target_keyword="   ")
+    assert res_ws.modified is False
+    assert res_ws.cleaned_text == raw_text
+    assert res_ws.occurrences_removed == 0
+
+
+# ---------------------------------------------------------------------------
+# Case 27: Adjacent Protected Tokens
+# ---------------------------------------------------------------------------
+def test_case_27_adjacent_protected_tokens():
+    """Verify multiple adjacent macros and variables are preserved intact."""
+    raw_text = "Check Lamborghini %str_A%%str_B% @[std]Start@[std]End"
+    expected = "Check %str_A%%str_B% @[std]Start@[std]End"
+
+    res = clean_text(raw_text)
+    assert res.modified is True
+    assert res.occurrences_removed == 1
+    assert res.cleaned_text == expected
+
+
+# ---------------------------------------------------------------------------
+# Case 28: Mixed Case Variations
+# ---------------------------------------------------------------------------
+def test_case_28_mixed_case_variations():
+    """Verify mixed case matching like 'LaMbOrGhInI' is cleaned."""
+    raw_text = "Testing LaMbOrGhInI control module."
+    expected = "Testing control module."
+
+    res = clean_text(raw_text)
+    assert res.modified is True
+    assert res.occurrences_removed == 1
+    assert res.cleaned_text == expected
+
+
+# ---------------------------------------------------------------------------
+# Case 29: Hyphenated Compound with Spaces
+# ---------------------------------------------------------------------------
+def test_case_29_hyphenated_compound_with_spaces():
+    """Verify compound with spaces around hyphen 'Lamborghini - Tester'."""
+    raw_text = "Verbindung mit Lamborghini - Tester herstellen."
+    expected = "Verbindung mit Tester herstellen."
+
+    res = clean_text(raw_text)
+    assert res.modified is True
+    assert res.cleaned_text == expected
+
+
+# ---------------------------------------------------------------------------
+# Case 30: Nested HTML/XML Formatting Tags
+# ---------------------------------------------------------------------------
+def test_case_30_nested_html_xml_tags():
+    """Verify complex nested HTML formatting with font, bold, color, and break tags."""
+    raw_text = "<font color=\"#0000ff\"><b>Lamborghini</b></font><br/>Check %str_ECU%."
+    expected = "<font color=\"#0000ff\"><b></b></font><br/>Check %str_ECU%."
+
+    res = clean_text(raw_text)
+    assert res.modified is True
+    assert res.occurrences_removed == 1
+    assert res.cleaned_text == expected
+
+
+# ---------------------------------------------------------------------------
+# Case 31: Various Bullet Styles and Numbering
+# ---------------------------------------------------------------------------
+def test_case_31_various_bullet_styles():
+    """Verify various bullet points (•, *, 1., 2)) capitalize the subsequent word."""
+    raw_text = (
+        "• Lamborghini check fuse\n"
+        "* Lamborghini measure voltage\n"
+        "1. Lamborghini start motor\n"
+        "2) Lamborghini record values"
+    )
+    expected = (
+        "• Check fuse\n"
+        "* Measure voltage\n"
+        "1. Start motor\n"
+        "2) Record values"
+    )
+
+    res = clean_text(raw_text)
+    assert res.modified is True
+    assert res.occurrences_removed == 4
+    assert res.cleaned_text == expected
+
+
+# ---------------------------------------------------------------------------
+# Case 32: Trailing Commas and Punctuation Duplication
+# ---------------------------------------------------------------------------
+def test_case_32_trailing_commas_and_duplicate_punctuation():
+    """Verify duplicate commas and trailing punctuation are properly cleaned."""
+    raw_text = "Check Lamborghini, , for errors."
+    expected = "Check, for errors."
+
+    res = clean_text(raw_text)
+    assert res.modified is True
+    assert res.cleaned_text == expected
+
+
+# ---------------------------------------------------------------------------
+# Case 33: Whitespace Only Input
+# ---------------------------------------------------------------------------
+def test_case_33_whitespace_only_input():
+    """Verify whitespace-only string returns unchanged."""
+    raw_text = "    \t   "
+    res = clean_text(raw_text)
+    assert res.modified is False
+    assert res.cleaned_text == raw_text
+    assert res.occurrences_removed == 0
+
+

@@ -3,6 +3,14 @@
 Contains UI drivers, screen capture tools, and workflow runners for the Lamborghini Worker agent.
 """
 
+from worker.local_vision import (
+    LocalVisionEngine,
+    RawMatch,
+    TemplateModel,
+    analyze_canvas_local,
+    create_default_icon_assets,
+    get_local_vision_engine,
+)
 from worker.screen_capture import (
     ScreenCapture,
     ScreenRegion,
@@ -34,6 +42,12 @@ from worker.workflow_runner import (
 )
 
 __all__ = [
+    "LocalVisionEngine",
+    "RawMatch",
+    "TemplateModel",
+    "analyze_canvas_local",
+    "create_default_icon_assets",
+    "get_local_vision_engine",
     "ScreenCapture",
     "ScreenRegion",
     "base64_to_image",

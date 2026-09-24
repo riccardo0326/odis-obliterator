@@ -95,6 +95,11 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LOGS_DIR", "logs_dir", "logs_dir_override"),
         description="Custom directory path for log files.",
     )
+    assets_dir_override: Optional[Path] = Field(
+        default=None,
+        validation_alias=AliasChoices("ASSETS_DIR", "assets_dir", "assets_dir_override"),
+        description="Custom directory path for assets.",
+    )
     input_gff_override: Optional[Path] = Field(
         default=None,
         validation_alias=AliasChoices("INPUT_GFF_PATH", "input_gff_path", "input_gff_override"),
@@ -121,6 +126,18 @@ class Settings(BaseSettings):
         if self.logs_dir_override is not None:
             return self.logs_dir_override
         return self.base_dir / "logs"
+
+    @property
+    def assets_dir(self) -> Path:
+        """Resolved assets directory."""
+        if self.assets_dir_override is not None:
+            return self.assets_dir_override
+        return self.base_dir / "assets"
+
+    @property
+    def icons_dir(self) -> Path:
+        """Resolved icons directory."""
+        return self.assets_dir / "icons"
 
     @property
     def input_gff_path(self) -> Path:

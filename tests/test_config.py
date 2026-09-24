@@ -37,6 +37,8 @@ def test_default_paths():
     assert config.base_dir == PROJECT_ROOT
     assert config.data_dir == PROJECT_ROOT / "data"
     assert config.logs_dir == PROJECT_ROOT / "logs"
+    assert config.assets_dir == PROJECT_ROOT / "assets"
+    assert config.icons_dir == PROJECT_ROOT / "assets" / "icons"
     assert config.input_gff_path == PROJECT_ROOT / "data" / "input_gff.txt"
 
 
@@ -44,15 +46,19 @@ def test_custom_path_overrides():
     """Verify custom directory and file path overrides."""
     custom_data = Path("/custom/data")
     custom_logs = Path("/custom/logs")
+    custom_assets = Path("/custom/assets")
     custom_gff = Path("/custom/my_gff.txt")
 
     config = Settings(
         data_dir_override=custom_data,
         logs_dir_override=custom_logs,
+        assets_dir_override=custom_assets,
         input_gff_override=custom_gff,
     )
     assert config.data_dir == custom_data
     assert config.logs_dir == custom_logs
+    assert config.assets_dir == custom_assets
+    assert config.icons_dir == custom_assets / "icons"
     assert config.input_gff_path == custom_gff
 
 
@@ -67,6 +73,7 @@ def test_environment_variable_overrides(monkeypatch):
     monkeypatch.setenv("VERSION_COMMENT", "Custom version comment")
     monkeypatch.setenv("WORKER_POLL_INTERVAL", "2.5")
     monkeypatch.setenv("CONTROLLER_API_URL", "http://192.168.1.100:9090")
+    monkeypatch.setenv("ASSETS_DIR", "/custom/assets/dir")
 
     config = reload_settings()
     assert config.host == "192.168.1.100"
@@ -78,6 +85,8 @@ def test_environment_variable_overrides(monkeypatch):
     assert config.version_comment == "Custom version comment"
     assert config.worker_poll_interval == 2.5
     assert config.controller_api_url == "http://192.168.1.100:9090"
+    assert config.assets_dir == Path("/custom/assets/dir")
+    assert config.icons_dir == Path("/custom/assets/dir/icons")
 
     # Reset
     reload_settings()
@@ -120,6 +129,8 @@ def test_project_scaffolding_structure():
     assert (PROJECT_ROOT / "data" / "input_gff.txt").is_file()
 
     assert (PROJECT_ROOT / "logs").is_dir()
+    assert (PROJECT_ROOT / "assets").is_dir()
+    assert (PROJECT_ROOT / "assets" / "icons").is_dir()
     assert (PROJECT_ROOT / "tests").is_dir()
     assert (PROJECT_ROOT / "tests" / "__init__.py").is_file()
 
