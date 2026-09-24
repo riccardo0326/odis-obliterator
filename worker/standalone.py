@@ -105,6 +105,8 @@ class StandaloneRunner:
         """
         state = self.start_session()
         processed = 0
+        mode = "DRY_RUN" if self.options.dry_run else "LIVE"
+        self.logger_service.info(f"Standalone execution mode: {mode}")
 
         try:
             while self.options.max_tasks is None or processed < self.options.max_tasks:
